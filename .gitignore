@@ -1,0 +1,10 @@
+target/
+data/
+*.log
+.idea/
+*.iml
+.mvn/
+mvnw
+mvnw.cmd
+scripts/
+frontend/node_modules/

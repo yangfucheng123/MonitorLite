@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MonitorLite — 轻量运维监控</title>
+<style>
+:root{
+  --bg:#000;
+  --text:#f5f5f7;
+  --text2:#a1a1a6;
+  --text3:#6e6e73;
+  --glass:rgba(255,255,255,0.06);
+  --glass-strong:rgba(255,255,255,0.1);
+  --border:rgba(255,255,255,0.08);
+  --border-hover:rgba(255,255,255,0.16);
+  --blue:#0a84ff;
+  --green:#30d158;
+  --red:#ff453a;
+  --orange:#ff9f0a;
+  --purple:#bf5af2;
+  --radius:18px;
+  --radius-sm:12px;
+}
+
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+body{
+  background:var(--bg);color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro Text','PingFang SC','Helvetica Neue',sans-serif;
+  font-size:14px;line-height:1.5;
+  overflow-x:hidden;min-height:100vh;position:relative;
+  letter-spacing:-0.01em;
+}
+
+/* Dynamic gradient mesh background */
+.bg{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+.bg::before,.bg::after,.bg-i{
+  content:'';position:absolute;border-radius:50%;filter:blur(80px);opacity:0.55;
+  animation:drift 20s ease-in-out infinite;
+}
+.bg::before{width:50vw;height:50vw;background:radial-gradient(circle,#1a0a2e,transparent 70%);top:-10%;left:-5%}
+.bg::after{width:45vw;height:45vw;background:radial-gradient(circle,#0a1f3d,transparent 70%);bottom:-10%;right:-5%;animation-delay:-7s}
+.bg-i{width:40vw;height:40vw;background:radial-gradient(circle,#2a0a1e,transparent 70%);top:30%;left:40%;animation-delay:-14s}
+@keyframes drift{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(30px,-20px) scale(1.05)}66%{transform:translate(-20px,30px) scale(0.95)}}
+
+.app{position:relative;z-index:1;max-width:1200px;margin:0 auto;padding:32px 28px 64px}
+
+/* === GLASS PANEL === */
+.panel{
+  background:var(--glass);
+  backdrop-filter:blur(24px) saturate(150%);
+  -webkit-backdrop-filter:blur(24px) saturate(150%);
+  border:0.5px solid var(--border);
+  border-radius:var(--radius);
+  padding:22px 24px;
+  margin-bottom:14px;
+  transition:all 0.4s cubic-bezier(0.4,0,0.2,1);
+  animation:fadeUp 0.6s cubic-bezier(0.4,0,0.2,1) both;
+}
+.panel:hover{background:var(--glass-strong);border-color:var(--border-hover)}
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+
+.panel-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.panel-title{font-size:13px;font-weight:600;color:var(--text2);letter-spacing:0.02em}
+.panel-time{font-size:12px;color:var(--text3);font-variant-numeric:tabular-nums}
+
+/* === TOPBAR === */
+.topbar{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:24px;flex-wrap:wrap;gap:12px;
+  padding:16px 24px;
+  background:var(--glass);
+  backdrop-filter:blur(24px) saturate(150%);
+  -webkit-backdrop-filter:blur(24px) saturate(150%);
+  border:0.5px solid var(--border);
+  border-radius:var(--radius);
+  animation:fadeUp 0.5s cubic-bezier(0.4,0,0.2,1) both;
+}
+.brand{display:flex;align-items:center;gap:12px}
+.brand-icon{
+  width:36px;height:36px;border-radius:10px;
+  background:linear-gradient(135deg,var(--blue),var(--purple));
+  display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:600;color:#fff;
+  box-shadow:0 4px 16px rgba(10,132,255,0.3);
+}
+.brand-text{font-size:20px;font-weight:600;letter-spacing:-0.02em}
+.brand-ver{font-size:11px;color:var(--text3);font-weight:500;margin-left:2px}
+
+.status-tag{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:100px;font-size:12px;font-weight:500}
+.status-tag.ok{background:rgba(48,209,88,0.12);color:var(--green)}
+.status-tag.warn{background:rgba(255,159,10,0.12);color:var(--orange)}
+.status-tag.bad{background:rgba(255,69,58,0.12);color:var(--red)}
+.sdot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.sdot.ok{background:var(--green);box-shadow:0 0 8px rgba(48,209,88,0.5)}
+.sdot.warn{background:var(--orange);box-shadow:0 0 8px rgba(255,159,10,0.5)}
+.sdot.bad{background:var(--red);box-shadow:0 0 8px rgba(255,69,58,0.5);animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+
+.topbar-right{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--text3);font-variant-numeric:tabular-nums}
+
+/* === NAV === */
+.nav{display:flex;gap:4px;margin-bottom:20px;padding:4px;background:var(--glass);border:0.5px solid var(--border);border-radius:100px;width:fit-content;backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px)}
+.nav-btn{
+  padding:7px 20px;border-radius:100px;border:none;
+  background:transparent;color:var(--text3);font-size:13px;font-weight:500;cursor:pointer;
+  transition:all 0.3s cubic-bezier(0.4,0,0.2,1);font-family:inherit;
+}
+.nav-btn:hover{color:var(--text)}
+.nav-btn.on{
+  background:var(--glass-strong);color:var(--text);
+  box-shadow:0 1px 3px rgba(0,0,0,0.3),inset 0 1px 0 rgba(255,255,255,0.1);
+}
+
+/* === STATS === */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px}
+@media(max-width:900px){.stats{grid-template-columns:repeat(2,1fr)}}
+.stat{padding:20px;text-align:center}
+.stat-num{font-size:32px;font-weight:700;letter-spacing:-0.03em;line-height:1;font-variant-numeric:tabular-nums}
+.stat-num.green{color:var(--green)}.stat-num.amber{color:var(--orange)}.stat-num.red{color:var(--red)}.stat-num.purple{color:var(--purple)}.stat-num.white{color:var(--text)}
+.stat-lab{font-size:11px;color:var(--text3);margin-top:6px;letter-spacing:0.02em}
+
+/* === GRID === */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+@media(max-width:800px){.grid2{grid-template-columns:1fr}}
+
+/* === BARS === */
+.bar{margin-bottom:12px}
+.bar-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:13px}
+.bar-track{height:6px;background:rgba(255,255,255,0.06);border-radius:100px;overflow:hidden}
+.bar-fill{height:100%;border-radius:100px;transition:width 1s cubic-bezier(0.4,0,0.2,1)}
+
+/* === ROW === */
+.row{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--radius-sm);transition:background 0.2s ease}
+.row:hover{background:rgba(255,255,255,0.04)}
+.row-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:500}
+.row-meta{color:var(--text3);font-size:12px;flex-shrink:0;white-space:nowrap;font-variant-numeric:tabular-nums}
+
+/* === LED === */
+.led{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.led.up{background:var(--green);box-shadow:0 0 8px rgba(48,209,88,0.4)}
+.led.dn{background:var(--red);box-shadow:0 0 8px rgba(255,69,58,0.4)}
+.led.to{background:var(--orange);box-shadow:0 0 8px rgba(255,159,10,0.4)}
+
+/* === TAGS === */
+.tag{display:inline-block;padding:2px 8px;border-radius:100px;font-size:11px;font-weight:600}
+.tag-up{background:rgba(48,209,88,0.12);color:var(--green)}
+.tag-dn{background:rgba(255,69,58,0.12);color:var(--red)}
+.tag-to{background:rgba(255,159,10,0.12);color:var(--orange)}
+
+/* === ALERT === */
+.alert{padding:12px 14px;border-radius:var(--radius-sm);margin-bottom:6px;display:flex;align-items:center;gap:10px;font-size:13px;transition:all 0.2s ease}
+.alert:hover{transform:translateX(2px)}
+.alert.crit{background:rgba(255,69,58,0.06);border:0.5px solid rgba(255,69,58,0.12)}
+.alert.warn{background:rgba(255,159,10,0.04);border:0.5px solid rgba(255,159,10,0.1)}
+
+/* === BUTTONS === */
+.btn{
+  display:inline-flex;align-items:center;gap:5px;padding:7px 16px;
+  border:0.5px solid var(--border);border-radius:100px;
+  background:var(--glass);color:var(--text2);font-size:12px;font-weight:500;cursor:pointer;
+  transition:all 0.25s cubic-bezier(0.4,0,0.2,1);white-space:nowrap;font-family:inherit;
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+}
+.btn:hover{background:var(--glass-strong);color:var(--text);border-color:var(--border-hover)}
+.btn:active{transform:scale(0.96)}
+.btn-pri{
+  background:var(--blue);border-color:transparent;color:#fff;
+  box-shadow:0 2px 12px rgba(10,132,255,0.3);
+}
+.btn-pri:hover{background:#006edc;color:#fff;box-shadow:0 4px 16px rgba(10,132,255,0.4)}
+.btn-red{color:var(--red)}
+.btn-red:hover{background:rgba(255,69,58,0.1);color:var(--red)}
+.btn:disabled{opacity:0.4;cursor:not-allowed;transform:none}
+
+/* === INPUTS === */
+input,select,textarea{
+  padding:9px 12px;background:rgba(0,0,0,0.2);border:0.5px solid var(--border);
+  border-radius:var(--radius-sm);color:var(--text);font-size:13px;outline:none;width:100%;
+  font-family:inherit;transition:all 0.2s;
+}
+input:focus,select:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(10,132,255,0.15)}
+select{cursor:pointer}select option{background:#1a1a1e;color:var(--text)}
+textarea{resize:vertical;font-family:'SF Mono',Consolas,monospace;font-size:12px}
+
+/* === FIELD === */
+.field{margin-bottom:12px}.field label{display:block;font-size:12px;color:var(--text3);margin-bottom:5px;font-weight:500}
+.hint{font-size:11px;color:var(--text3);margin-top:4px}
+
+/* === TERMINAL === */
+.term{
+  background:rgba(0,0,0,0.35);border-radius:var(--radius-sm);padding:14px;
+  font-family:'SF Mono',Consolas,monospace;font-size:12px;line-height:1.7;
+  max-height:260px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;color:#a0f0a0;
+  border:0.5px solid var(--border);
+}
+
+/* === MODAL === */
+.modal-over{position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:100;display:flex;
+  align-items:center;justify-content:center;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+.modal-box{
+  background:rgba(28,28,32,0.8);
+  border:0.5px solid var(--border-hover);border-radius:var(--radius);
+  padding:28px;min-width:420px;max-width:580px;max-height:80vh;overflow-y:auto;
+  backdrop-filter:blur(40px) saturate(150%);-webkit-backdrop-filter:blur(40px) saturate(150%);
+  box-shadow:0 24px 80px rgba(0,0,0,0.5);
+  animation:modalIn 0.35s cubic-bezier(0.4,0,0.2,1) both;
+}
+@keyframes modalIn{from{opacity:0;transform:scale(0.95) translateY(8px)}to{opacity:1;transform:scale(1) translateY(0)}}
+
+/* === EMPTY === */
+.empty{padding:24px;text-align:center;color:var(--text3);font-size:13px}
+
+/* === TOAST === */
+.toast{position:fixed;top:20px;right:20px;padding:10px 16px;border-radius:100px;z-index:200;
+  font-size:13px;font-weight:500;backdrop-filter:blur(24px) saturate(150%);-webkit-backdrop-filter:blur(24px) saturate(150%);
+  opacity:0;pointer-events:none;transition:all 0.3s cubic-bezier(0.4,0,0.2,1);transform:translateY(-10px)}
+.toast.show{opacity:1;transform:translateY(0)}
+.toast-ok{background:rgba(48,209,88,0.15);border:0.5px solid rgba(48,209,88,0.25);color:var(--green)}
+.toast-err{background:rgba(255,69,58,0.15);border:0.5px solid rgba(255,69,58,0.25);color:var(--red)}
+
+/* === ADD CARD === */
+.add-card{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:28px;cursor:pointer;text-align:center;border-style:dashed;min-height:120px}
+.add-card:hover{background:rgba(255,255,255,0.04);border-color:var(--blue)}
+.add-card-plus{font-size:28px;margin-bottom:8px;color:var(--text3);font-weight:200;transition:all 0.3s ease}
+.add-card:hover .add-card-plus{color:var(--blue);transform:scale(1.1)}
+.add-card-title{font-size:14px;font-weight:600;margin-bottom:3px}
+.add-card-desc{font-size:12px;color:var(--text3)}
+
+/* === PRESETS === */
+.presets{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;margin:10px 0}
+.preset{padding:10px;background:rgba(0,0,0,0.2);border:0.5px solid var(--border);
+  border-radius:var(--radius-sm);cursor:pointer;text-align:center;font-size:12px;transition:all 0.2s ease}
+.preset:hover{border-color:var(--blue);background:rgba(10,132,255,0.06)}
+.preset.sel{border-color:var(--blue);background:rgba(10,132,255,0.12)}
+
+/* === SCROLLBAR === */
+::-webkit-scrollbar{width:6px}::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);border-radius:100px}
+::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.18)}
+
+.flex{display:flex;align-items:center}.fbet{display:flex;align-items:center;justify-content:space-between}
+.g8{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.g12{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+</style>
+</head>
+<body>
+
+<div class="bg"><div class="bg-i"></div></div>
+
+<div class="app">
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="brand">
+    <div class="brand-icon">◆</div>
+    <span class="brand-text">MonitorLite</span><span class="brand-ver">v1.0</span>
+    <span class="status-tag ok" id="statusTag"><span class="sdot ok" id="statusDot"></span><span id="statusText">系统正常</span></span>
+  </div>
+  <div class="topbar-right"><span id="clock">--:--</span><button class="btn btn-pri" onclick="checkNow()">立即检测</button><button class="btn" onclick="genDemo()">演示数据</button></div>
+</div>
+
+<!-- NAV -->
+<div class="nav">
+  <button class="nav-btn on" onclick="switchTab('dash')">监控面板</button>
+  <button class="nav-btn" onclick="switchTab('tgt')">监控目标</button>
+  <button class="nav-btn" onclick="switchTab('cnt')">容器集群</button>
+  <button class="nav-btn" onclick="switchTab('adv')">高级工具</button>
+</div>
+
+<!-- DASHBOARD -->
+<div id="tab-dash">
+  <div class="stats" id="statsEl"></div>
+
+  <div class="panel">
+    <div class="panel-head"><span class="panel-title">系统资源</span><span class="panel-time" id="sysTime"></span></div><div id="sysInfo"></div>
+  </div>
+
+  <div class="grid2">
+    <div class="panel"><div class="panel-head"><span class="panel-title">网址监控</span><span class="panel-time" id="epTime"></span></div><div id="epInfo"></div></div>
+    <div class="panel"><div class="panel-head"><span class="panel-title">服务监控</span><span class="panel-time" id="svcTime"></span></div><div id="svcInfo"></div></div>
+  </div>
+
+  <div class="grid2">
+    <div class="panel"><div class="panel-head"><span class="panel-title">K8s集群</span><span class="panel-time" id="k8sTime"></span></div><div id="k8sInfo"></div></div>
+    <div class="panel"><div class="panel-head"><span class="panel-title">Docker容器</span><span class="panel-time" id="dockerTime"></span></div><div id="dockerInfo"></div></div>
+  </div>
+
+  <div class="panel" id="customPanel" style="display:none"><div class="panel-head"><span class="panel-title">数据面板</span><span class="panel-time" id="customTime"></span></div><div id="customInfo"></div></div>
+
+  <div class="panel"><div class="panel-head"><span class="panel-title">告警列表</span><span class="panel-time" id="alertCount"></span></div><div id="alertList"></div></div>
+</div>
+
+<!-- TARGETS -->
+<div id="tab-tgt" style="display:none">
+  <div class="grid2" style="margin-bottom:14px">
+    <div class="panel add-card" onclick="showEpModal()"><div class="add-card-plus">+</div><div class="add-card-title">添加网址监控</div><div class="add-card-desc">监控 HTTP/HTTPS 站点可用性</div></div>
+    <div class="panel add-card" onclick="showSvcModal()"><div class="add-card-plus">+</div><div class="add-card-title">添加服务监控</div><div class="add-card-desc">数据库 · 中间件 · TCP 服务</div></div>
+  </div>
+  <div class="panel"><div class="panel-head"><span class="panel-title">网址监控列表</span><span class="panel-time" id="epCount"></span></div><div id="epList"></div></div>
+  <div class="panel"><div class="panel-head"><span class="panel-title">服务监控列表</span><span class="panel-time" id="svcCount"></span></div><div id="svcList"></div></div>
+</div>
+
+<!-- CONTAINER CLUSTER -->
+<div id="tab-cnt" style="display:none">
+  <div class="grid2" style="margin-bottom:14px">
+    <div class="panel add-card" onclick="showK8sModal()"><div class="add-card-plus">+</div><div class="add-card-title">添加K8s集群</div><div class="add-card-desc">华为CCE · 阿里ACK · KubeSphere · Rainbond</div></div>
+    <div class="panel add-card" onclick="showDockerModal()"><div class="add-card-plus">+</div><div class="add-card-title">添加Docker主机</div><div class="add-card-desc">麒麟V10 · 统信UOS · 海光/鲲鹏架构</div></div>
+  </div>
+  <div class="panel"><div class="panel-head"><span class="panel-title">K8s集群列表</span><span class="panel-time" id="k8sCount"></span></div><div id="k8sList"></div></div>
+  <div class="panel"><div class="panel-head"><span class="panel-title">Docker主机列表</span><span class="panel-time" id="dockerCount"></span></div><div id="dockerList"></div></div>
+</div>
+
+<!-- ADVANCED -->
+<div id="tab-adv" style="display:none">
+  <div class="panel">
+    <div class="panel-head"><span class="panel-title">脚本工具</span></div>
+    <div style="display:flex;gap:14px;flex-wrap:wrap">
+      <div style="flex:1;min-width:180px">
+        <select id="scriptSelect"><option value="">-- 选择脚本 --</option></select>
+        <input type="text" id="scriptParams" placeholder="参数（可选）" style="margin-top:8px">
+        <div style="margin-top:10px;display:flex;gap:8px">
+          <button class="btn btn-pri" id="btnRun" onclick="runScript()">执行</button>
+          <button class="btn btn-red" id="btnKill" onclick="killScript()" style="display:none">终止</button>
+        </div>
+      </div>
+      <div style="flex:2;min-width:280px"><div class="term" id="scriptTerm">$ 等待执行...</div></div>
+    </div>
+  </div>
+  <div class="panel"><div class="panel-head"><span class="panel-title">自定义查询</span><button class="btn btn-pri" onclick="showQModal()">+ 添加</button></div><div id="queryList"></div></div>
+  <div class="panel"><div class="panel-head"><span class="panel-title">外部数据源</span><button class="btn btn-pri" onclick="showDsModal()">+ 添加</button></div><div id="dsList"></div></div>
+  <div class="panel"><div class="panel-head"><span class="panel-title">系统配置</span></div><div id="configList"></div></div>
+</div>
+
+<!-- MODAL + TOAST -->
+<div id="modalBox"></div>
+<div class="toast" id="toast"></div>
+</div>
+
+<script>
+var API='/api',tab='dash',runId=null,timer=null;
+var SPS=[
+  {n:'MySQL',t:'tcp',port:3306},{n:'PostgreSQL',t:'tcp',port:5432},{n:'Redis',t:'tcp',port:6379},{n:'Nginx',t:'tcp',port:80},{n:'Tomcat',t:'tcp',port:8080},{n:'RabbitMQ',t:'tcp',port:5672},{n:'Elasticsearch',t:'tcp',port:9200},{n:'MongoDB',t:'tcp',port:27017},{n:'Oracle',t:'db',port:1521},{n:'SQL Server',t:'tcp',port:1433},{n:'SFTP',t:'tcp',port:22},
+  {n:'东方通TongWeb',t:'tcp',port:9011},{n:'金蝶Apusic',t:'tcp',port:8088},{n:'宝兰德BES',t:'tcp',port:18080},{n:'中创InforSuite',t:'tcp',port:8080},{n:'普元EOS',t:'tcp',port:8080},
+  {n:'达梦DM',t:'db',port:5236},{n:'人大金仓',t:'db',port:54321},{n:'南大通用GBase',t:'db',port:5258},{n:'神通Oscar',t:'db',port:2003},{n:'瀚高HighGo',t:'db',port:5866},
+  {n:'自定义',t:'tcp',port:0}
+];
+
+document.addEventListener('DOMContentLoaded',function(){
+  refreshAll();loadScripts();
+  timer=setInterval(refreshAll,30000);
+  setInterval(updateClock,1000);updateClock();
+  setInterval(function(){if(runId)pollScript();},1000);
+});
+
+function switchTab(t){
+  tab=t;var m={dash:'监控面板',tgt:'监控目标',cnt:'容器集群',adv:'高级工具'};
+  document.getElementById('tab-dash').style.display=t==='dash'?'':'none';
+  document.getElementById('tab-tgt').style.display=t==='tgt'?'':'none';
+  document.getElementById('tab-cnt').style.display=t==='cnt'?'':'none';
+  document.getElementById('tab-adv').style.display=t==='adv'?'':'none';
+  var ns=document.querySelectorAll('.nav-btn');
+  for(var i=0;i<ns.length;i++)ns[i].classList.toggle('on',ns[i].textContent.indexOf(m[t])>=0);
+  if(t==='tgt')refreshTargets();
+  if(t==='cnt')refreshContainer();
+  if(t==='adv')refreshAdvanced();
+}
+
+function toast(msg,type){
+  var t=document.getElementById('toast');t.textContent=msg;t.className='toast toast-'+(type||'ok')+' show';
+  setTimeout(function(){t.classList.remove('show')},2200);
+}
+
+function get(url,cb){fetch(API+url).then(function(r){return r.json()}).then(cb).catch(function(){})}
+function post(url,body,cb){
+  var isStr=typeof body==='string';
+  fetch(API+url,{method:'POST',headers:isStr?{'Content-Type':'application/x-www-form-urlencoded'}:{'Content-Type':'application/json'},body:isStr?body:JSON.stringify(body)})
+    .then(function(r){return r.json()}).then(cb).catch(function(e){toast('请求失败','err')});
+}
+function del(url,cb){fetch(API+url,{method:'DELETE'}).then(function(){if(cb)cb()}).catch(function(){})}
+
+function refreshAll(){get('/snapshot',function(d){requestAnimationFrame(function(){renderAll(d)})})}
+
+function renderAll(d){
+  if(!d||!d.serverTime)return;
+  var tm=new Date(d.serverTime).toLocaleTimeString();
+  updateStatus(d);renderStats(d);
+  document.getElementById('sysTime').textContent=tm;
+  renderSystem(d.system);
+  document.getElementById('epTime').textContent=tm;
+  renderEndpoints(d.endpoints);
+  document.getElementById('svcTime').textContent=tm;
+  renderServices(d.apis,d.infra);
+  renderK8s(d.k8s);
+  renderDocker(d.docker);
+  renderCustom(d.custom);
+  renderAlerts(d.alerts);
+}
+
+function updateStatus(d){
+  var al=(d.alerts||[]).filter(function(a){return !a.acked});
+  var crit=al.some(function(a){return a.alertLevel==='CRITICAL'});
+  var tag=document.getElementById('statusTag'),dot=document.getElementById('statusDot'),txt=document.getElementById('statusText');
+  if(crit){tag.className='status-tag bad';dot.className='sdot bad';txt.textContent='严重告警'}
+  else if(al.length>0){tag.className='status-tag warn';dot.className='sdot warn';txt.textContent=al.length+' 条告警'}
+  else{tag.className='status-tag ok';dot.className='sdot ok';txt.textContent='系统正常'}
+}
+
+function renderStats(d){
+  var sys=d.system||{},eps=d.endpoints||{},apis=d.apis||{},infra=d.infra||{};
+  var up=eps.up||0,epTotal=eps.total||0;
+  var aVals=Object.values(apis),iVals=Object.values(infra);
+  var svcTotal=aVals.length+iVals.length;
+  var svcUp=aVals.filter(function(a){return a.status==='UP'}).length+iVals.filter(function(i){return i.status==='UP'}).length;
+  var kVals=Object.values(d.k8s||{}),dVals=Object.values(d.docker||{});
+  var k8sTotal=kVals.length,dockerTotal=dVals.length;
+  var k8sUp=kVals.filter(function(k){return k.status==='UP'}).length;
+  var dockerUp=dVals.filter(function(dk){return dk.status==='UP'}).length;
+  var al=(d.alerts||[]).filter(function(a){return !a.acked}).length;
+  var cpu=sys.cpuUsage||0,mem=sys.memPercent||0,disk=sys.diskPercent||0;
+  var items=[
+    {v:cpu+'%',l:'CPU',c:cpu>80?'red':cpu>50?'amber':'green'},
+    {v:mem+'%',l:'内存',c:mem>85?'red':mem>60?'amber':'green'},
+    {v:disk+'%',l:'磁盘',c:disk>85?'red':disk>60?'amber':'green'},
+    {v:epTotal,l:'网址监控',c:'purple'},
+    {v:up+'/'+epTotal,l:'网址在线',c:up===epTotal?'green':'amber'},
+    {v:svcTotal,l:'服务监控',c:'purple'},
+    {v:svcUp+'/'+svcTotal,l:'服务在线',c:svcUp===svcTotal?'green':svcUp>0?'amber':'red'},
+    {v:k8sTotal,l:'K8s集群',c:'purple'},
+    {v:k8sUp+'/'+k8sTotal,l:'K8s在线',c:k8sUp===k8sTotal?'green':'amber'},
+    {v:dockerTotal,l:'Docker主机',c:'purple'},
+    {v:dockerUp+'/'+dockerTotal,l:'容器在线',c:dockerUp===dockerTotal?'green':'amber'},
+    {v:al,l:'告警',c:al===0?'green':'red'}
+  ];
+  var h='';
+  for(var i=0;i<items.length;i++){var it=items[i];h+='<div class="panel stat"><div class="stat-num '+it.c+'">'+it.v+'</div><div class="stat-lab">'+it.l+'</div></div>'}
+  document.getElementById('statsEl').innerHTML=h;
+}
+
+function renderSystem(sys){
+  var el=document.getElementById('sysInfo');
+  if(!sys||!sys.cpuCores){el.innerHTML='<div class="empty">等待数据采集...</div>';return}
+  var jvmMb=((sys.jvmUsed||0)/1024/1024).toFixed(0),jvmMax=((sys.jvmMax||0)/1024/1024).toFixed(0);
+  var diskGb=((sys.diskTotal||0)/1024/1024/1024).toFixed(1),diskUsed=((sys.diskUsed||0)/1024/1024/1024).toFixed(1);
+  var cpu=sys.cpuUsage||0,mem=sys.memPercent||0,disk=sys.diskPercent||0;
+  el.innerHTML=
+    bar('CPU',cpu+'%',cpu,'linear-gradient(90deg,#0a84ff,#5ac8fa)')+
+    bar('内存',mem+'%',mem,mem>65?'linear-gradient(90deg,#ff453a,#ff6961)':'linear-gradient(90deg,#30d158,#5ee88a)')+
+    bar('磁盘 '+diskUsed+'/'+diskGb+' GB',disk+'%',disk,'linear-gradient(90deg,#ff9f0a,#ffcc00)')+
+    '<div style="display:flex;gap:20px;flex-wrap:wrap;font-size:11px;color:var(--text3);margin-top:6px;font-variant-numeric:tabular-nums">'+
+    '<span>JVM '+jvmMb+'/'+jvmMax+' MB</span><span>'+sys.cpuCores+' 核</span><span>运行 '+fmtUp(sys.uptime||0)+'</span></div>';
+}
+function bar(l,v,p,c){return '<div class="bar"><div class="bar-row"><span>'+l+'</span><span style="font-weight:600">'+v+'</span></div><div class="bar-track"><div class="bar-fill" style="width:'+Math.max(0,Math.min(p,100))+'%;background:'+c+'"></div></div></div>'}
+function fmtUp(s){var d=Math.floor(s/86400),h=Math.floor((s%86400)/3600),m=Math.floor((s%3600)/60);return (d?d+'d ':'')+h+'h '+m+'m'}
+
+function renderEndpoints(eps){
+  var el=document.getElementById('epInfo');
+  if(!eps||!eps.total){el.innerHTML='<div class="empty">暂无网址监控，去「监控目标」添加</div>';return}
+  var h='',rs=eps.results||[];
+  for(var i=0;i<rs.length;i++){
+    var r=rs[i],cls=r.status==='UP'?'up':r.status==='TIMEOUT'?'to':'dn';
+    var tCls=cls==='up'?'up':cls==='to'?'to':'dn',tTxt=cls==='up'?'正常':cls==='to'?'超时':'异常';
+    h+='<div class="row"><span class="led '+cls+'"></span><span class="row-name">'+esc(r.name)+'</span><span class="row-meta">'+esc(r.url)+'</span><span class="row-meta">'+r.responseTime+'ms <span class="tag tag-'+tCls+'">'+tTxt+'</span></span></div>';
+  }
+  el.innerHTML=h;
+}
+
+function renderServices(apis,infra){
+  var el=document.getElementById('svcInfo');
+  var aVals=Object.values(apis||{}),iVals=Object.values(infra||{});
+  if(!aVals.length&&!iVals.length){el.innerHTML='<div class="empty">暂无服务监控</div>';return}
+  var items=[];
+  for(var i=0;i<aVals.length;i++)items.push({n:aVals[i].name,h:aVals[i].host,p:aVals[i].port,s:aVals[i].status,r:aVals[i].responseTime,t:'API'});
+  for(var j=0;j<iVals.length;j++)items.push({n:iVals[j].name,h:iVals[j].host,p:iVals[j].port,s:iVals[j].status,r:iVals[j].responseTime,t:iVals[j].target_type||'TCP'});
+  var h='';
+  for(var k=0;k<items.length;k++){
+    var s=items[k],cls=s.s==='UP'?'up':'dn',tCls=cls==='up'?'up':'dn';
+    h+='<div class="row"><span class="led '+cls+'"></span><span class="row-name">'+esc(s.n)+'</span><span class="row-meta">'+esc(s.h)+':'+s.p+'</span><span class="row-meta" style="font-size:11px">'+s.t+'</span><span class="row-meta">'+s.r+'ms <span class="tag tag-'+tCls+'">'+(cls==='up'?'正常':'异常')+'</span></span></div>';
+  }
+  el.innerHTML=h;
+}
+
+function renderK8s(k8s){
+  var el=document.getElementById('k8sInfo');
+  var vals=Object.values(k8s||{});
+  document.getElementById('k8sTime').textContent=new Date().toLocaleTimeString();
+  if(!vals.length){el.innerHTML='<div class="empty">暂无K8s集群，去「容器集群」添加</div>';return}
+  var h='';
+  for(var i=0;i<vals.length;i++){
+    var k=vals[i],cls=k.status==='UP'?'up':'dn';
+    var nodes=k.nodes||{},pods=k.pods||{},deps=k.deployments||{};
+    h+='<div class="row" style="flex-wrap:wrap">'+
+      '<span class="led '+cls+'"></span>'+
+      '<span class="row-name">'+esc(k.name)+'</span>'+
+      '<span class="row-meta" style="font-size:10px">'+esc(k.clusterType||'K8s')+'</span>'+
+      '<span class="row-meta" style="font-size:10px">Node '+(nodes.ready||0)+'/'+(nodes.total||0)+'</span>'+
+      '<span class="row-meta" style="font-size:10px">Pod '+(pods.running||0)+'/'+(pods.total||0)+'</span>'+
+      '<span class="row-meta" style="font-size:10px">Dep '+(deps.available||0)+'/'+(deps.total||0)+'</span>'+
+      '<span class="row-meta">'+k.responseTime+'ms <span class="tag tag-'+(cls==='up'?'up':'dn')+'">'+(cls==='up'?'正常':'异常')+'</span></span>'+
+    '</div>';
+  }
+  el.innerHTML=h;
+}
+
+function renderDocker(docker){
+  var el=document.getElementById('dockerInfo');
+  var vals=Object.values(docker||{});
+  document.getElementById('dockerTime').textContent=new Date().toLocaleTimeString();
+  if(!vals.length){el.innerHTML='<div class="empty">暂无Docker主机，去「容器集群」添加</div>';return}
+  var h='';
+  for(var i=0;i<vals.length;i++){
+    var dk=vals[i],cls=dk.status==='UP'?'up':'dn';
+    var c=dk.containers||{};
+    h+='<div class="row" style="flex-wrap:wrap">'+
+      '<span class="led '+cls+'"></span>'+
+      '<span class="row-name">'+esc(dk.name)+'</span>'+
+      '<span class="row-meta" style="font-size:10px">'+esc(dk.dockerVersion||'')+'</span>'+
+      '<span class="row-meta" style="font-size:10px">容器 '+(c.running||0)+'/'+(c.total||0)+'</span>'+
+      '<span class="row-meta" style="font-size:10px">异常 '+(c.unhealthy||0)+'</span>'+
+      '<span class="row-meta">'+dk.responseTime+'ms <span class="tag tag-'+(cls==='up'?'up':'dn')+'">'+(cls==='up'?'正常':'异常')+'</span></span>'+
+    '</div>';
+  }
+  el.innerHTML=h;
+}
+
+function renderCustom(cust){
+  var panel=document.getElementById('customPanel'),el=document.getElementById('customInfo');
+  if(!cust||!Object.keys(cust).length){panel.style.display='none';return}
+  panel.style.display='';document.getElementById('customTime').textContent=new Date().toLocaleTimeString();
+  var h='',keys=Object.keys(cust);
+  for(var i=0;i<keys.length;i++){
+    var name=keys[i],q=cust[name],data=q.data||[];
+    if(q.type==='error'){h+='<div style="color:var(--red);margin-bottom:8px"><b>'+esc(name)+'</b>: '+esc(q.message)+'</div>';continue}
+    if(q.type==='cards'){
+      h+='<div style="margin-bottom:14px"><div style="font-weight:600;font-size:13px;margin-bottom:8px;color:var(--text2)">'+esc(name)+'</div><div style="display:flex;gap:8px;flex-wrap:wrap">';
+      for(var j=0;j<data.length;j++){var row=data[j],rk=Object.keys(row),v=row.value||row.VALUE||row[rk[0]],l=row.label||row.LABEL||(rk.length>1?rk[1]:rk[0]);h+='<div class="panel stat"><div class="stat-num green" style="font-size:20px">'+esc(String(v!=null?v:'--'))+'</div><div class="stat-lab">'+esc(String(l||''))+'</div></div>'}
+      h+='</div></div>';
+    }else{
+      h+='<div style="margin-bottom:10px"><div style="font-weight:600;font-size:13px;margin-bottom:6px;color:var(--text2)">'+esc(name)+'</div>';
+      for(var k=0;k<Math.min(data.length,8);k++)h+='<div class="row" style="font-size:11px;font-family:monospace;cursor:default">'+esc(JSON.stringify(data[k]))+'</div>';
+      h+='</div>';
+    }
+  }
+  el.innerHTML=h;
+}
+
+function renderAlerts(al){
+  var el=document.getElementById('alertList'),unack=(al||[]).filter(function(a){return !a.acked});
+  document.getElementById('alertCount').textContent=unack.length?unack.length+' 条':'';
+  if(!unack.length){el.innerHTML='<div class="empty">暂无告警</div>';return}
+  var h='';
+  for(var i=0;i<Math.min(unack.length,8);i++){
+    var a=unack[i],crit=a.alertLevel==='CRITICAL';
+    h+='<div class="alert '+(crit?'crit':'warn')+'"><span style="font-weight:600;min-width:36px;font-size:12px;color:'+(crit?'var(--red)':'var(--orange)')+'">'+(crit?'严重':'提醒')+'</span><span style="flex:1;font-size:12px">'+esc(a.message)+'</span><span style="color:var(--text3);font-size:11px;font-variant-numeric:tabular-nums">'+(a.createTime?new Date(a.createTime).toLocaleTimeString():'')+'</span><button class="btn" onclick="ackAlert(\''+esc(a.targetName)+'\')">确认</button></div>';
+  }
+  el.innerHTML=h;
+}
+
+function refreshTargets(){
+  get('/endpoints',function(items){
+    var el=document.getElementById('epList');document.getElementById('epCount').textContent=(items||[]).length+' 个';
+    if(!items||!items.length){el.innerHTML='<div class="empty">暂无网址监控</div>';return}
+    var h='';
+    for(var i=0;i<items.length;i++)h+='<div class="row"><span class="row-name">'+esc(items[i].name)+'</span><span class="row-meta">'+esc(items[i].url)+'</span><span class="row-meta">'+esc(items[i].method)+'</span><button class="btn btn-red" onclick="delEp('+items[i].id+')">删除</button></div>';
+    el.innerHTML=h;
+  });
+  get('/ext-apis',function(apis){
+    get('/infra-targets',function(infra){
+      var all=[];
+      for(var i=0;i<(apis||[]).length;i++)all.push({id:apis[i].id,n:apis[i].name,h:apis[i].host,p:apis[i].port,t:'API',d:'/ext-apis/'+apis[i].id});
+      for(var j=0;j<(infra||[]).length;j++)all.push({id:infra[j].id,n:infra[j].name,h:infra[j].host,p:infra[j].port,t:infra[j].target_type||'TCP',d:'/infra-targets/'+infra[j].id});
+      var el=document.getElementById('svcList');document.getElementById('svcCount').textContent=all.length+' 个';
+      if(!all.length){el.innerHTML='<div class="empty">暂无服务监控</div>';return}
+      var h='';
+      for(var k=0;k<all.length;k++)h+='<div class="row"><span class="row-name">'+esc(all[k].n)+'</span><span class="row-meta">'+esc(all[k].h)+':'+all[k].p+'</span><span class="row-meta">'+all[k].t+'</span><button class="btn btn-red" onclick="delSvc(\''+all[k].d+'\')">删除</button></div>';
+      el.innerHTML=h;
+    });
+  });
+}
+function delEp(id){if(confirm('确定删除？')){del('/endpoints/'+id,function(){toast('已删除');refreshTargets()})}}
+function delSvc(url){if(confirm('确定删除？')){del(url,function(){toast('已删除');refreshTargets()})}}
+
+// ===== 容器集群管理 =====
+var K8S_TYPES=['华为CCE','阿里ACK','腾讯TKE','KubeSphere','Rainbond','DaoCloud道客','灵雀云','原生K8s','自定义'];
+function refreshContainer(){
+  get('/k8s-targets',function(items){
+    var el=document.getElementById('k8sList');document.getElementById('k8sCount').textContent=(items||[]).length+' 个';
+    if(!items||!items.length){el.innerHTML='<div class="empty">暂无K8s集群</div>';return}
+    var h='';
+    for(var i=0;i<items.length;i++)h+='<div class="row"><span class="row-name"><b>'+esc(items[i].name)+'</b> <span style="color:var(--text3);font-size:11px">'+esc(items[i].cluster_type)+'</span></span><span class="row-meta">'+esc(items[i].api_server)+'</span><button class="btn btn-red" onclick="delK8s('+items[i].id+')">删除</button></div>';
+    el.innerHTML=h;
+  });
+  get('/docker-targets',function(items){
+    var el=document.getElementById('dockerList');document.getElementById('dockerCount').textContent=(items||[]).length+' 个';
+    if(!items||!items.length){el.innerHTML='<div class="empty">暂无Docker主机</div>';return}
+    var h='';
+    for(var i=0;i<items.length;i++)h+='<div class="row"><span class="row-name"><b>'+esc(items[i].name)+'</b></span><span class="row-meta">'+esc(items[i].host)+':'+items[i].port+'</span><span class="row-meta">'+(items[i].tls_enabled?'TLS':'无TLS')+'</span><button class="btn btn-red" onclick="delDocker('+items[i].id+')">删除</button></div>';
+    el.innerHTML=h;
+  });
+}
+function delK8s(id){if(confirm('确定删除？')){del('/k8s-targets/'+id,function(){toast('已删除');refreshContainer()})}}
+function delDocker(id){if(confirm('确定删除？')){del('/docker-targets/'+id,function(){toast('已删除');refreshContainer()})}}
+function showK8sModal(){
+  var ps='';for(var i=0;i<K8S_TYPES.length;i++)ps+='<div class="preset" id="k8spr'+i+'" onclick="pickK8sP('+i+')">'+K8S_TYPES[i]+'</div>';
+  modal('添加K8s集群','<div class="presets">'+ps+'</div><div class="field"><label>集群名称</label><input id="kfName" placeholder="例如：生产CCE集群"></div><div class="field"><label>集群类型</label><input id="kfType" value="华为CCE"></div><div class="field"><label>API Server</label><input id="kfApi" placeholder="https://192.168.1.220:6443"></div><div class="field"><label>ServiceAccount Token（可选）</label><textarea id="kfToken" rows="2" placeholder="填入Token可查询Node/Pod/Deployment详情"></textarea></div><div class="field"><label>命名空间</label><input id="kfNs" value="default"></div><button class="btn btn-pri" style="width:100%;margin-top:10px;justify-content:center" onclick="addK8s()">确认添加</button>');
+  selK8sP=0;pickK8sP(0);
+}
+var selK8sP=0;
+function pickK8sP(i){selK8sP=i;var cs=document.querySelectorAll('.preset');for(var j=0;j<cs.length;j++)cs[j].classList.toggle('sel',j===i);document.getElementById('kfType').value=K8S_TYPES[i]}
+function addK8s(){
+  var n=gv('kfName'),t=gv('kfType'),a=gv('kfApi');
+  if(!n||!a){toast('请填写完整','err');return}
+  post('/k8s-targets',{name:n,clusterType:t,apiServer:a,token:gv('kfToken'),namespace:gv('kfNs')},function(d){closeModal();if(d.success){toast('已添加');refreshContainer()}else toast(d.error||'失败','err')});
+}
+function showDockerModal(){
+  modal('添加Docker主机','<div class="field"><label>名称</label><input id="dfName2" placeholder="例如：麒麟Docker节点"></div><div class="field"><label>主机地址</label><input id="dfHost2" placeholder="192.168.1.230"></div><div class="field"><label>端口</label><input type="number" id="dfPort2" value="2375"></div><div class="field"><label>TLS</label><select id="dfTls"><option value="false">关闭（2375）</option><option value="true">开启（2376）</option></select></div><button class="btn btn-pri" style="width:100%;margin-top:10px;justify-content:center" onclick="addDocker()">确认添加</button>');
+}
+function addDocker(){
+  var n=gv('dfName2'),h=gv('dfHost2'),p=parseInt(gv('dfPort2'))||2375;
+  if(!n||!h){toast('请填写完整','err');return}
+  post('/docker-targets',{name:n,host:h,port:p,tlsEnabled:gv('dfTls')==='true'},function(d){closeModal();if(d.success){toast('已添加');refreshContainer()}else toast(d.error||'失败','err')});
+}
+
+function showEpModal(){
+  modal('添加网址监控','<div class="field"><label>名称</label><input id="tfName" placeholder="例如：官方网站"></div><div class="field"><label>网址</label><input id="tfUrl" placeholder="https://www.example.com"></div><button class="btn btn-pri" style="width:100%;margin-top:10px;justify-content:center" onclick="addEp()">确认添加</button>');
+}
+function addEp(){
+  var n=document.getElementById('tfName').value.trim(),u=document.getElementById('tfUrl').value.trim();
+  if(!n||!u){toast('请填写完整','err');return}
+  post('/endpoints',{name:n,url:u,method:'GET'},function(d){closeModal();if(d.success){toast('已添加');refreshTargets()}else toast(d.error||'失败','err')});
+}
+var selP=-1;
+function showSvcModal(){
+  var ps='';for(var i=0;i<SPS.length;i++)ps+='<div class="preset" id="pr'+i+'" onclick="pickP('+i+')">'+SPS[i].n+'<br><span style="font-size:10px;color:var(--text3)">端口 '+(SPS[i].port||'手动')+'</span></div>';
+  modal('添加服务监控','<div class="presets">'+ps+'</div><div class="field"><label>名称</label><input id="sfName" placeholder="例如：生产数据库"></div><div class="field"><label>主机地址</label><input id="sfHost" placeholder="192.168.1.100"></div><div class="field"><label>端口</label><input type="number" id="sfPort" placeholder="3306"></div><button class="btn btn-pri" style="width:100%;margin-top:10px;justify-content:center" onclick="addSvc()">确认添加</button>');
+  selP=-1;
+}
+function pickP(i){selP=i;var p=SPS[i],cs=document.querySelectorAll('.preset');for(var j=0;j<cs.length;j++)cs[j].classList.toggle('sel',j===i);document.getElementById('sfPort').value=p.port||'';if(!document.getElementById('sfName').value)document.getElementById('sfName').value=p.n}
+function addSvc(){
+  var n=document.getElementById('sfName').value.trim(),h=document.getElementById('sfHost').value.trim(),p=parseInt(document.getElementById('sfPort').value)||0;
+  if(!n||!h||!p){toast('请填写完整','err');return}
+  var pr=SPS[selP]||{t:'tcp'},url=pr.t==='db'?'/infra-targets':'/ext-apis';
+  var body=pr.t==='db'?{name:n,targetType:'db',host:h,port:p}:{name:n,host:h,port:p};
+  post(url,body,function(d){closeModal();if(d.success){toast('已添加');refreshTargets()}else toast(d.error||'失败','err')});
+}
+
+function refreshAdvanced(){loadQueries();loadDs();loadConfig();loadScripts()}
+function loadQueries(){
+  get('/custom-queries',function(items){
+    var el=document.getElementById('queryList');
+    if(!items||!items.length){el.innerHTML='<div class="empty">暂无自定义查询</div>';return}
+    var h='';
+    for(var i=0;i<items.length;i++)h+='<div class="row"><span class="row-name"><b>'+esc(items[i].name)+'</b> <span style="color:var(--text3);font-size:11px">'+esc(items[i].datasource_name)+'</span></span><button class="btn btn-pri" onclick="testQ('+items[i].id+')">测试</button><button class="btn btn-red" onclick="delQ('+items[i].id+')">删除</button></div>';
+    el.innerHTML=h;
+  });
+}
+function showQModal(){
+  get('/datasources',function(dss){
+    var opts='<option value="H2">H2 (内置)</option>';
+    for(var i=0;i<(dss||[]).length;i++)opts+='<option value="'+esc(dss[i].name)+'">'+esc(dss[i].name)+'</option>';
+    modal('添加自定义查询','<div class="field"><label>名称</label><input id="qfName" placeholder="例如：表统计"></div><div class="field"><label>数据源</label><select id="qfDs">'+opts+'</select></div><div class="field"><label>SQL</label><textarea id="qfSql" rows="3" placeholder="SELECT COUNT(*) AS cnt FROM INFORMATION_SCHEMA.TABLES"></textarea></div><div class="field"><label>展示方式</label><select id="qfDisp"><option value="cards">卡片</option><option value="list">列表</option></select></div><div style="margin-top:10px;display:flex;gap:8px"><button class="btn" onclick="testNewQ()">测试</button><button class="btn btn-pri" onclick="addQ()">添加</button></div>');
+  });
+}
+function testNewQ(){post('/custom-queries/test',{datasourceName:gv('qfDs'),querySql:gv('qfSql')},function(d){if(d.success)toast('成功, '+d.count+' 条');else toast('失败: '+d.error,'err')})}
+function addQ(){post('/custom-queries',{name:gv('qfName'),datasourceName:gv('qfDs'),querySql:gv('qfSql'),displayType:gv('qfDisp')},function(d){closeModal();if(d.success){toast('已添加');loadQueries()}else toast(d.error||'失败','err')})}
+function testQ(id){get('/custom-queries',function(items){var q=items.find(function(x){return x.id===id});if(!q)return;post('/custom-queries/test',{datasourceName:q.datasource_name,querySql:q.query_sql},function(d){if(d.success)toast('成功, '+d.count+' 条');else toast('失败: '+d.error,'err')})})}
+function delQ(id){del('/custom-queries/'+id,function(){toast('已删除');loadQueries()})}
+function loadDs(){
+  get('/datasources',function(dss){
+    var el=document.getElementById('dsList'),h='';
+    for(var i=0;i<(dss||[]).length;i++){var d=dss[i];h+='<div class="row"><span class="led '+(d.connected?'up':'dn')+'"></span><span class="row-name"><b>'+esc(d.name)+'</b> <span style="color:var(--text3);font-size:11px">'+esc(d.jdbc_url||'')+'</span></span>'+(d.name!=='H2'?'<button class="btn btn-red" onclick="delDs(\''+esc(d.name)+'\')">删除</button>':'')+'</div>'}
+    el.innerHTML=h||'<div class="empty">暂无外部数据源</div>';
+  });
+}
+function showDsModal(){
+  modal('添加数据源','<div class="field"><label>名称</label><input id="dfName" placeholder="例如：生产库"></div><div class="field"><label>驱动类</label><input id="dfDriver" placeholder="com.mysql.cj.jdbc.Driver"></div><div class="hint">MySQL: com.mysql.cj.jdbc.Driver · PG: org.postgresql.Driver<br>达梦: dm.jdbc.driver.DmDriver · 金仓: com.kingbase8.Driver<br>瀚高: com.highgo.jdbc.Driver · GBase: com.gbase.jdbc.Driver<br>神通: com.esen.jdbc.SqlServerDriver</div><div class="field"><label>JDBC URL</label><input id="dfUrl" placeholder="jdbc:mysql://host:3306/db"></div><div class="field"><label>用户名</label><input id="dfUser"></div><div class="field"><label>密码</label><input type="password" id="dfPass"></div><button class="btn btn-pri" style="width:100%;margin-top:10px;justify-content:center" onclick="addDs()">测试并添加</button>');
+}
+function addDs(){post('/datasources',{name:gv('dfName'),driverClass:gv('dfDriver'),jdbcUrl:gv('dfUrl'),username:gv('dfUser'),password:gv('dfPass'),maxPoolSize:2},function(d){closeModal();if(d.success){toast('已添加');loadDs()}else toast(d.error||'失败','err')})}
+function delDs(name){if(confirm('确定删除？')){del('/datasources/'+encodeURIComponent(name),function(){toast('已删除');loadDs()})}}
+function loadConfig(){
+  get('/config',function(items){
+    var el=document.getElementById('configList');
+    if(!items||!items.length){el.innerHTML='<div class="empty">无配置项</div>';return}
+    var h='';
+    for(var i=0;i<items.length;i++)h+='<div class="row" style="gap:8px"><span style="min-width:100px;font-size:12px">'+esc(items[i].config_key)+'</span><span style="color:var(--text3);font-size:11px">'+esc(items[i].config_group)+'</span><input value="'+esc(items[i].config_value||'')+'" id="cfg_'+esc(items[i].config_key)+'" style="flex:1"><button class="btn btn-pri" onclick="saveCfg(\''+esc(items[i].config_key)+'\')">保存</button></div>';
+    el.innerHTML=h;
+  });
+}
+function saveCfg(k){post('/config','key='+encodeURIComponent(k)+'&value='+encodeURIComponent(document.getElementById('cfg_'+k).value),function(){toast('已保存')})}
+function loadScripts(){
+  get('/scripts',function(items){
+    var h='<option value="">-- 选择脚本 ('+(items||[]).length+'个) --</option>';
+    for(var i=0;i<(items||[]).length;i++)h+='<option value="'+esc(items[i].name)+'">'+esc(items[i].name)+' ('+(items[i].size/1024).toFixed(1)+'KB)</option>';
+    document.getElementById('scriptSelect').innerHTML=h;
+  });
+}
+function runScript(){
+  var sn=document.getElementById('scriptSelect').value;if(!sn)return;
+  document.getElementById('btnRun').disabled=true;document.getElementById('btnKill').style.display='inline-flex';
+  post('/scripts/run','name='+encodeURIComponent(sn)+'&params='+encodeURIComponent(document.getElementById('scriptParams').value||''),function(d){
+    if(d.success){runId=d.runId;document.getElementById('scriptTerm').textContent='$ '+sn+'\n启动中...\n';pollScript()}
+    else{document.getElementById('scriptTerm').textContent='$ Error: '+(d.error||'')+'\n';resetSUI()}
+  });
+}
+function pollScript(){
+  if(!runId)return;
+  get('/scripts/output?runId='+runId,function(d){
+    var t=document.getElementById('scriptTerm');t.textContent=(d.output||'');
+    if(!d.running){var st=d.status||{};t.textContent+='\n--- exit: '+(st.exitCode!==undefined?st.exitCode:'?')+' ---\n';resetSUI()}t.scrollTop=t.scrollHeight;
+  });
+}
+function killScript(){if(!runId)return;post('/scripts/kill','runId='+runId,function(){document.getElementById('scriptTerm').textContent+='\n--- killed ---\n';resetSUI()})}
+function resetSUI(){runId=null;document.getElementById('btnRun').disabled=false;document.getElementById('btnKill').style.display='none'}
+function checkNow(){post('/check/now',{},function(){refreshAll();toast('检测完成')})}
+function genDemo(){get('/demo',function(){refreshAll();toast('演示数据已生成')})}
+function ackAlert(name){post('/alerts/ack','targetName='+encodeURIComponent(name),function(){refreshAll();toast('已确认')})}
+function modal(title,body){
+  document.getElementById('modalBox').innerHTML='<div class="modal-over" onclick="if(event.target===this)closeModal()"><div class="modal-box"><div class="fbet" style="margin-bottom:16px"><b style="font-size:17px;font-weight:600">'+title+'</b><button class="btn" onclick="closeModal()">✕</button></div>'+body+'</div></div>';
+}
+function closeModal(){document.getElementById('modalBox').innerHTML=''}
+function gv(id){var el=document.getElementById(id);return el?el.value:''}
+function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+function updateClock(){document.getElementById('clock').textContent=new Date().toLocaleTimeString()}
+</script>
+</body>
+</html>
